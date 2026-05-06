@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Movie Catalog</title>
+    <style>
+        body { font-family: sans-serif; max-width: 900px; margin: 30px auto; padding: 0 20px; color: #222; }
+        h1 { border-bottom: 2px solid #222; padding-bottom: 8px; }
+        h2 { margin-top: 30px; }
+        input, select { padding: 6px 8px; border: 1px solid #aaa; border-radius: 4px; font-size: 0.95rem; }
+        button { padding: 6px 14px; background: #222; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #444; }
+        .form-row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; align-items: flex-end; }
+        .form-group { display: flex; flex-direction: column; gap: 4px; }
+        label { font-size: 0.85rem; font-weight: 600; }
+        #message { padding: 8px 12px; border-radius: 4px; margin: 10px 0; display: none; }
+        .success { background: #d4edda; color: #155724; }
+        .error   { background: #f8d7da; color: #721c24; }
+        table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+        th { background: #222; color: #fff; padding: 8px 10px; text-align: left; font-weight: 600; }
+        td { padding: 8px 10px; border-bottom: 1px solid #ddd; font-size: 0.9rem; }
+        tr:hover td { background: #f5f5f5; }
+        .btn-sm { padding: 4px 10px; font-size: 0.8rem; }
+        .btn-del { background: #c0392b; }
+        .btn-del:hover { background: #a93226; }
+        #movieCount { font-size: 0.9rem; color: #555; margin-bottom: 6px; }
+    </style>
+</head>
+<body>
+
+<h1>Movies</h1>
+
+<h2>Add Movie</h2>
+<div class="form-row">
+    <div class="form-group"><label>Title *</label><input id="title" type="text"></div>
+    <div class="form-group"><label>Director *</label><input id="director" type="text"></div>
+    <div class="form-group"><label>Genre *</label><input id="genre" type="text"></div>
+    <div class="form-group"><label>Year *</label><input id="releaseYear" type="number" min="1800" max="2035" style="width:80px"></div>
+    <div class="form-group"><label>Rating (0-10) *</label><input id="rating" type="number" min="0" max="10" step="0.1" style="width:80px"></div>
+    <div class="form-group"><label>Duration (min) *</label><input id="duration" type="number" min="1" style="width:90px"></div>
+    <div class="form-group">
+        <label>Language</label>
+        <select id="language">
+            <option>English</option><option>Spanish</option><option>French</option>
+            <option>German</option><option>Italian</option><option>Japanese</option>
+            <option>Korean</option><option>Chinese</option><option>Hindi</option><option>Other</option>
+        </select>
+    </div>
+    <button onclick="addMovie()">Add Movie</button>
+</div>
+
+<div id="message"></div>
+
+<h2>Collection</h2>
+<div id="movieCount">Loading...</div>
+<table>
+    <thead>
+        <tr>
+            <th>Title</th><th>Director</th><th>Genre</th><th>Year</th>
+            <th>Language</th><th>Duration</th><th>Rating</th><th>Actions</th>
+        </tr>
+    </thead>
+    <tbody id="moviesBody">
+        <tr><td colspan="8">Loading...</td></tr>
+    </tbody>
+</table>
+
+<script>
+    const API = '/api/movies';
+
+    function showMessage(msg, type = 'success') {
+        const el = document.getElementById('message');
+        el.textContent = msg;
+        el.className = type;
+        el.style.display = 'block';
+        setTimeout(() => el.style.display = 'none', 3000);
+    }
+
+    async function fetchMovies() {
+        try {
+            const res = await fetch(API);
+            const movies = await res.json();
+            renderMovies(movies);
+        } catch {
+            document.getElementById('moviesBody').innerHTML = '<tr><td colspan="8">Error loading movies.</td></tr>';
+        }
+    }
+
+    function renderMovies(movies) {
+        const count = document.getElementById('movieCount');
+        const body  = document.getElementById('moviesBody');
+        count.textContent = `${movies.length} movie${movies.length !== 1 ? 's' : ''}`;
+        if (!movies.length) {
+            body.innerHTML = '<tr><td colspan="8">No movies yet. Add one above!</td></tr>';
+            return;
+        }
+        body.innerHTML = movies.map(m => `
+            <tr>
+                <td><strong>${m.title}</strong></td>
+                <td>${m.director}</td>
+                <td>${m.genre}</td>
+                <td>${m.releaseYear}</td>
+                <td>${m.language}</td>
+                <td><span style="cursor:pointer;text-decoration:underline dotted" title="Click to edit" onclick="editField(this,'${m._id}','duration')">${m.duration}</span> min</td>
+                <td><span style="cursor:pointer;text-decoration:underline dotted" title="Click to edit" onclick="editField(this,'${m._id}','rating')">⭐ ${m.rating}</span></td>
+                <td style="white-space:nowrap">
+                    <button class="btn-sm btn-del" onclick="deleteMovie('${m._id}')">Delete</button>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    async function addMovie() {
+        const get = id => document.getElementById(id).value.trim();
+        const data = {
+            title:       get('title'),
+            director:    get('director'),
+            genre:       get('genre'),
+            releaseYear: parseInt(get('releaseYear')),
+            rating:      parseFloat(get('rating')),
+            duration:    parseInt(get('duration')),
+            language:    get('language'),
+        };
+        if (!data.title || !data.director || !data.genre || isNaN(data.releaseYear) || isNaN(data.rating) || isNaN(data.duration)) {
+            showMessage('Please fill in all required fields.', 'error'); return;
+        }
+        try {
+            const res = await fetch(API, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
+            if (res.ok) { showMessage('Movie added!'); ['title','director','genre','releaseYear','rating','duration'].forEach(id => document.getElementById(id).value = ''); fetchMovies(); }
+            else { const e = await res.json(); showMessage(`Error: ${e.message}`, 'error'); }
+        } catch { showMessage('Error adding movie.', 'error'); }
+    }
+
+    async function deleteMovie(id) {
+        if (!confirm('Delete this movie?')) return;
+        try {
+            const res = await fetch(`${API}/${id}`, { method: 'DELETE' });
+            if (res.ok) { showMessage('Movie deleted.'); fetchMovies(); }
+            else showMessage('Error deleting.', 'error');
+        } catch { showMessage('Error deleting.', 'error'); }
+    }
+
+    function editField(span, id, field) {
+        const current = field === 'rating' ? span.textContent.replace('⭐ ','') : span.textContent;
+        const input = document.createElement('input');
+        input.type = 'number'; input.value = current;
+        input.style.cssText = 'width:70px;padding:2px 4px;';
+        if (field === 'rating') { input.min = 0; input.max = 10; input.step = 0.1; }
+        else { input.min = 1; }
+        input.onblur = async () => {
+            const val = field === 'rating' ? parseFloat(input.value) : parseInt(input.value);
+            if (isNaN(val) || val < 1) { span.textContent = field === 'rating' ? `⭐ ${current}` : current; showMessage('Invalid value', 'error'); return; }
+            try {
+                const res = await fetch(`${API}/${id}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({[field]: val}) });
+                if (res.ok) { showMessage(`${field} updated!`); fetchMovies(); }
+                else { showMessage('Update failed.', 'error'); fetchMovies(); }
+            } catch { showMessage('Error.', 'error'); fetchMovies(); }
+        };
+        input.onkeydown = e => { if (e.key === 'Enter') input.blur(); if (e.key === 'Escape') { span.textContent = field === 'rating' ? `⭐ ${current}` : current; span.parentNode.replaceChild(span, input); } };
+        span.parentNode.replaceChild(input, span);
+        input.focus(); input.select();
+    }
+
+    fetchMovies();
+</script>
+</body>
+</html>
